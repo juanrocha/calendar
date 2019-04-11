@@ -40,6 +40,7 @@ remDr$close()
 class(tbl[[1]])
 tbl <- tbl[[1]]
 tbl <- tbl[-8,]
+tbl <- tbl[-19,]
 
 ## Add manually dates for holidays.
 tbl$date <- c(
@@ -76,6 +77,9 @@ tbl <- tbl  %>%
 
 tbl <- tbl[-10,] # delete sagrado corazon because it's the same date as others, no need to mark the same red day twice.
 
+tbl$short_festivos <- c("Año Nuevo","Reyes Magos", "San José","Jueves Santo",
+"Viernes Santo","Día del Trabajo","Ascensión","Corpus Christi","San Pedro","Independencia", "Batalla de Boyacá","Asunción", "Día de la Raza","Día de todos los Santos","Independencia de\n Cartagena","Inmaculada Concepción", "Navidad","Carnaval","Carnaval","Carnaval","Carnaval")
+
 tbl2 <- tbl2[[2]] %>%
     select(1,2) %>%
     rename(lunar_phase = V1, date = V2) %>%
@@ -110,6 +114,21 @@ df <- df %>%
     mutate(month = as_factor(month))
 
 meses <- c("Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre")
+sci_names <- c(
+    "Euthynnus alletteratus",
+    "Caranx caninus",
+    "Notarius grandicassis",
+    "Caranx crysos",
+    "Caranx hyppos",
+    "Mugil curema",
+    "Mugil incilis",
+    "Lutjanus purpureus",
+    "Centropomus pectinatus",
+    "Megalops atlanticus",
+    "Elagatis bipinnulata",
+    "Eucinostomus argenteus"
+)
+
 
 levels(df$month) <- meses
 
@@ -119,12 +138,70 @@ df <- df %>%
 
 
 df <- df %>% mutate(
-    day_type = ifelse(week_day == 1 | week_day == 7, "weekend", "weekday")
-)
+    day_type = ifelse(is.na(festivos), ifelse(week_day == 1 | week_day == 7, "weekend", "weekday"), "festivo"
+            ))
 
-%>% mutate(day_type = if(!is.na(festivos))"festivo") %>% select(8:10)
+## Correct the last week of the year for december, it should not be week 1 of next year but week 53.
+df$week[df$date > "2019-12-28"] <- 53
+
+## make day_type a level so it keeps the same coloring across months with no holidays:
+color_day <- c( "grey", "black", "purple")
+
+df <- df %>%
+    mutate(day_type = as_factor(day_type),
+        day_type = fct_rev(day_type) )
+#          %>%
+#     mutate(
+#         color_text = if(day_type == "festivo") "purple",
+#         color_text = if(day_type == "weekday") "black",
+#         color_text = if(day_type == "festivo") "purple",
+# )
 
 load.emojifont("OpenSansEmoji.ttf")
+
+setwd('~/Documents/Projects/Calendar/figures')
+
+for (i in seq_along(meses)){
+
+    df %>%
+        mutate(x = 0.9, y = 0.9) %>%
+        filter(month == meses[i]) %>%
+        ggplot(aes(x,y)) +
+        geom_text(aes(label = day, color = day_type),
+            size = 4, show.legend = FALSE) +
+        geom_text(aes(label = short_festivos), color = "purple",
+            x = 0., y = 0.7, size = 3, hjust = "left") +
+        geom_text(
+            data = filter(df, month == meses[i], !is.na(lunar_phase)) ,
+            aes(label = emoji(lunar_phase)), x = 0.1, y = 0.9, size = 4,
+            family = "OpenSansEmoji"
+            ) +
+        # geom_emoji(
+        #     data = filter(df, month == "Enero", !is.na(lunar_phase)) ,
+        #     aes(alias = lunar_phase ), x = 0.1, y = 0.9, size = 5
+        #     #family = "OpenSansEmoji"
+        #     ) +
+        scale_color_manual(values = c("grey", "black", "purple")) +
+        lims(x = c(0,1), y = c(0,1)) +
+        labs(x = "", y = "", title = paste(meses[i], " 2019"), 
+             subtitle = bquote("A éste pez los cientiíficos lo llaman " ~ italic(.(sci_names[i])) ~ 
+                              " y los pescadores lo llaman _______________________." )) +
+        facet_grid(week ~ day_names, switch = "y") +
+        theme_light(base_size = 12, base_family = "sans") +
+        theme(
+            axis.text = element_blank(), axis.ticks = element_blank(),
+            axis.title = element_blank(), panel.grid = element_blank(),
+            #strip.background = element_rect(fill = "gray50"),
+            panel.spacing = unit(1, "mm"),
+            strip.text.y = element_text(angle = 180),
+            plot.title = element_text(size = 40)
+        )
+    
+    ggsave(filename = paste0(meses[i],".png"), device = "png", bg = "transparent", 
+           dpi = 600, width = 11, height = 7.5, units = ("in"))
+}
+
+
 
 df %>%
     mutate(x = 0.9, y = 0.9) %>%
@@ -132,21 +209,21 @@ df %>%
     ggplot(aes(x,y)) +
     geom_text(aes(label = day, color = day_type),
         size = 4, show.legend = FALSE) +
-    geom_text(aes(label = festivos), color = "purple",
-        x = 0., y = 0.7, size = 2, hjust = "left") +
-    # geom_text(
-    #     data = filter(df, month == "Enero", !is.na(lunar_phase)) ,
-    #     aes(label = emoji(lunar_phase)), x = 0.1, y = 0.9, size = 5,
-    #     family = "OpenSansEmoji"
-    #     ) +
-    geom_emoji(
+    geom_text(aes(label = short_festivos), color = "purple",
+        x = 0., y = 0.7, size = 3, hjust = "left") +
+    geom_text(
         data = filter(df, month == "Enero", !is.na(lunar_phase)) ,
-        aes(alias = lunar_phase ), x = 0.1, y = 0.9, size = 5
-        #family = "OpenSansEmoji"
+        aes(label = emoji(lunar_phase)), x = 0.1, y = 0.9, size = 4,
+        family = "OpenSansEmoji"
         ) +
-    scale_color_manual(values = c("black", "red")) +
+    # geom_emoji(
+    #     data = filter(df, month == "Enero", !is.na(lunar_phase)) ,
+    #     aes(alias = lunar_phase ), x = 0.1, y = 0.9, size = 5
+    #     #family = "OpenSansEmoji"
+    #     ) +
+    scale_color_manual(values = c("grey", "black", "purple")) +
     lims(x = c(0,1), y = c(0,1)) +
-    labs(x = "", y = "", title = "Enero 2019") +
+    labs(x = "", y = "", title = paste("Enero", " 2019")) +
     facet_grid(week ~ day_names, switch = "y") +
     theme_light(base_size = 12) +
     theme(
@@ -156,7 +233,3 @@ df %>%
         panel.spacing = unit(1, "mm"),
         strip.text.y = element_text(angle = 180)
     )
-
-
-ggplot(data = data_frame(x=0.5, y = 0.5, lab = "moon"), aes(x,y)) +
-geom_text(aes(label = emoji(lab)), family = "EmojiOne")
